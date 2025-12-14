@@ -29,6 +29,9 @@ class ImageCompression:
                     "display": "number",
                     "description": "压缩质量（0-100，默认90，如果图像较大例如10MB，可以设置为85左右，具体设置多少看你需要压缩成多大的文件大小，数值越低压缩越狠，质量就会有所下降，最低80左右就差不多，只会非常轻微的压缩图片质量，85往上图片压缩后，没有明显的质量下降，但是文件大小明显缩小。）"
                 }),
+                "format": (["JPEG", "PNG"], {
+                    "default": "JPEG"
+                }),
             },
         }
     
@@ -40,7 +43,7 @@ class ImageCompression:
     # 确保节点能被正确搜索
     DESCRIPTION = "KOOK Image Compression Node"
     
-    def compress(self, image, quality):
+    def compress(self, image, quality, format="JPEG"):
         """
         执行图像压缩
         """
@@ -58,16 +61,38 @@ class ImageCompression:
             # 转换为[0, 255]范围的numpy数组
             img_np = (img.cpu().numpy() * 255).astype(np.uint8)
             
-            # 转换为PIL图像（确保是RGB格式）
+            # 转换为PIL图像
             if img_np.shape[-1] == 4:
-                # 处理RGBA图像，转换为RGB
-                pil_img = Image.fromarray(img_np).convert("RGB")
+                # 处理RGBA图像
+                pil_img = Image.fromarray(img_np)
             else:
                 pil_img = Image.fromarray(img_np)
             
-            # 执行JPG压缩（使用内存中的BytesIO，避免磁盘IO）
+            # 执行图像压缩（使用内存中的BytesIO，避免磁盘IO）
             buffer_compressed = io.BytesIO()
-            pil_img.save(buffer_compressed, format="JPEG", quality=quality, optimize=True, subsampling=1)
+            
+            if format.upper() == "JPEG":
+                # JPEG压缩
+                # 对于JPEG，确保是RGB格式
+                if pil_img.mode == "RGBA":
+                    pil_img = pil_img.convert("RGB")
+                pil_img.save(
+                    buffer_compressed, 
+                    format="JPEG", 
+                    quality=quality, 
+                    optimize=True, 
+                    subsampling=1
+                )
+            else:  # PNG压缩
+                # PNG压缩
+                # PNG质量参数范围是0-9，我们将0-100映射到0-9
+                png_quality = max(0, min(9, quality // 11))
+                pil_img.save(
+                    buffer_compressed, 
+                    format="PNG", 
+                    quality=png_quality, 
+                    optimize=True
+                )
             
             # 转换回PIL图像
             buffer_compressed.seek(0)
@@ -76,7 +101,7 @@ class ImageCompression:
             # 转换回numpy数组
             img_compressed_np = np.array(pil_img_compressed)
             
-            # 确保通道数正确（如果是灰度图，转换为RGB）
+            # 确保通道数正确
             if len(img_compressed_np.shape) == 2:  # 灰度图
                 img_compressed_np = np.stack([img_compressed_np] * 3, axis=-1)
             elif img_compressed_np.shape[-1] == 1:  # 单通道图
