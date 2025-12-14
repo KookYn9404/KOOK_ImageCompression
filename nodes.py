@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-JPG图片压缩节点实现
+图片压缩节点实现
 """
 
 import io
@@ -8,9 +8,9 @@ import numpy as np
 from PIL import Image
 import torch
 
-class JPGImageCompression:
+class ImageCompression:
     """
-    JPG图片压缩节点
+    高质量图片压缩节点
     """
     
     @classmethod
@@ -38,11 +38,11 @@ class JPGImageCompression:
     CATEGORY = "image"
     
     # 确保节点能被正确搜索
-    DESCRIPTION = "KOOK JPG Image Compression Node"
+    DESCRIPTION = "KOOK Image Compression Node"
     
     def compress(self, image, quality):
         """
-        执行JPG压缩
+        执行图像压缩
         """
         # 转换ComfyUI图像格式到PIL图像
         # ComfyUI的图像格式是：[batch, height, width, channels]，值范围是[0, 1]
