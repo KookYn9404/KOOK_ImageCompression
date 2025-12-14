@@ -26,7 +26,8 @@ class JPGImageCompression:
                     "min": 0,
                     "max": 100,
                     "step": 1,
-                    "display": "number"
+                    "display": "number",
+                    "description": "压缩质量（0-100，默认90，如果图像较大例如10MB，可以设置为85左右，具体设置多少看你需要压缩成多大的文件大小，数值越低压缩越狠，质量就会有所下降，最低80左右就差不多，只会非常轻微的压缩图片质量，85往上图片压缩后，没有明显的质量下降，但是文件大小明显缩小。）"
                 }),
             },
         }
@@ -104,6 +105,10 @@ class SaveJPGImage:
         return {
             "required": {
                 "images": ("IMAGE",),
+                "filename_prefix": ("STRING", {"default": "Comfyui_"}),
+            },
+            "optional": {
+                "save_path": ("STRING", {"default": ""}),
             },
         }
     
@@ -116,17 +121,24 @@ class SaveJPGImage:
     # 确保节点能被正确搜索
     DESCRIPTION = "KOOK Save JPG Image Node"
     
-    def save_jpg(self, images):
+    def save_jpg(self, images, filename_prefix, save_path=""):
         """
         保存图像为JPG格式（默认质量90）
         """
         import os
         from datetime import datetime
         
-        # 创建输出目录
-        output_dir = "output"
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
+        # 确保output目录存在，用于预览
+        preview_dir = "output"
+        if not os.path.exists(preview_dir):
+            os.makedirs(preview_dir, exist_ok=True)
+        
+        # 确定实际保存目录
+        actual_dir = save_path.strip() if save_path and save_path.strip() else preview_dir
+        
+        # 确保实际保存目录存在
+        if not os.path.exists(actual_dir):
+            os.makedirs(actual_dir, exist_ok=True)
         
         batch_size = images.shape[0]
         saved_images = []
@@ -148,13 +160,20 @@ class SaveJPGImage:
             
             # 生成唯一文件名
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"comfyui_jpg_{timestamp}_{i+1}.jpg"
-            file_path = os.path.join(output_dir, filename)
+            filename = f"{filename_prefix}{timestamp}_{i+1}.jpg"
             
-            # 保存JPG文件（默认质量90）
-            pil_img.save(file_path, format="JPEG", quality=90, optimize=True)
+            # 保存到实际目录
+            actual_file_path = os.path.join(actual_dir, filename)
+            pil_img.save(actual_file_path, format="JPEG", quality=90, optimize=True)
+            
+            # 对于预览，确保图片在output目录中
+            preview_file_path = os.path.join(preview_dir, filename)
+            if actual_dir != preview_dir:
+                # 如果保存到自定义目录，也复制一份到preview目录用于预览
+                pil_img.save(preview_file_path, format="JPEG", quality=90, optimize=True)
             
             # 记录保存的图像信息，用于预览
+            # ComfyUI预览需要图片在output目录中，subfolder为空
             saved_images.append({
                 "filename": filename,
                 "subfolder": "",
@@ -162,7 +181,8 @@ class SaveJPGImage:
             })
         
         # 按照ComfyUI官方OUTPUT_NODE规范返回结果
-        # 必须包含images字段的ui字典，用于前端显示预览
+        # 必须包含ui字典和result元组
+        # 这是ComfyUI OUTPUT_NODE的标准返回格式
         return {
             "ui": {
                 "images": saved_images
