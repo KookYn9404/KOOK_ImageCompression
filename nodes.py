@@ -25,6 +25,15 @@ def get_output_directory():
     return "output"
 
 
+def get_temp_directory():
+    """
+    获取 ComfyUI 临时目录，缺失时回退到 output 目录。
+    """
+    if folder_paths is not None and hasattr(folder_paths, "get_temp_directory"):
+        return folder_paths.get_temp_directory()
+    return get_output_directory()
+
+
 def unwrap_quoted_path(path_value):
     """
     去掉路径首尾空白和成对包裹引号。
@@ -257,8 +266,9 @@ class SaveJPGImage:
         from datetime import datetime
         
         # 仅在未指定自定义路径时使用默认 output 目录。
-        # 指定 save_path 后，以 save_path 为唯一保存位置，避免同时落盘到默认目录。
+        # 指定 save_path 后，以 save_path 为唯一正式保存位置；节点预览写入 temp。
         preview_dir = normalize_directory_path(get_output_directory())
+        temp_preview_dir = normalize_directory_path(get_temp_directory())
         custom_save_path = unwrap_quoted_path(save_path)
         actual_dir = normalize_directory_path(custom_save_path) if custom_save_path else preview_dir
         safe_filename_prefix = sanitize_filename_prefix(filename_prefix)
@@ -266,6 +276,8 @@ class SaveJPGImage:
         # 确保实际保存目录存在
         if not os.path.exists(actual_dir):
             os.makedirs(actual_dir, exist_ok=True)
+        if custom_save_path and not os.path.exists(temp_preview_dir):
+            os.makedirs(temp_preview_dir, exist_ok=True)
         
         batch_size = images.shape[0]
         saved_images = []
@@ -298,8 +310,21 @@ class SaveJPGImage:
             pil_img.save(actual_file_path, format=file_format, **save_kwargs)
             saved_paths.append(actual_file_path)
             
-            # 仅默认 output 模式返回图片预览，自定义路径模式不再声明 output 资源。
-            if not custom_save_path:
+            if custom_save_path:
+                preview_filename, preview_file_path = build_unique_output_path(
+                    temp_preview_dir,
+                    f"{safe_filename_prefix}preview_",
+                    timestamp,
+                    i + 1,
+                    file_extension,
+                )
+                pil_img.save(preview_file_path, format=file_format, **save_kwargs)
+                saved_images.append({
+                    "filename": preview_filename,
+                    "subfolder": "",
+                    "type": "temp"
+                })
+            else:
                 subfolder = os.path.relpath(actual_dir, preview_dir)
                 if subfolder == ".":
                     subfolder = ""
@@ -313,6 +338,7 @@ class SaveJPGImage:
         if custom_save_path:
             return {
                 "ui": {
+                    "images": saved_images,
                     "text": saved_paths
                 },
                 "result": ()
